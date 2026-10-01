@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF Press</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --canvas: #0F2B2A;
+    --canvas-2: #123634;
+    --paper: #F5F0E1;
+    --paper-line: #E1D9C2;
+    --ink: #17211E;
+    --ink-soft: #4A5550;
+    --amber: #E7A23A;
+    --amber-deep: #C97F1E;
+    --coral: #D9694F;
+    --good: #4F8F6B;
+    --text-on-canvas: #EDEFE7;
+    --text-on-canvas-soft: #A9BDB6;
+    --radius-card: 4px;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: inherit; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--canvas);
+    color: var(--text-on-canvas);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  body {
+    min-height: 100%;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(231,162,58,0.08), transparent 55%),
+      radial-gradient(ellipse at bottom right, rgba(217,105,79,0.06), transparent 50%);
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header.hero {
+    display: flex; flex-direction: column; gap: 14px;
+    margin-bottom: 40px; padding-bottom: 28px;
+    border-bottom: 1px solid rgba(237,239,231,0.14);
+  }
+  .kicker {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--amber);
+  }
+  h1.title {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-weight: 800;
+    font-size: clamp(42px, 7vw, 76px);
+    line-height: 0.92;
+    margin: 0;
+    color: var(--text-on-canvas);
+    letter-spacing: 0.2px;
+  }
+  header.hero p {
+    max-width: 62ch;
+    font-size: 16px; line-height: 1.6;
+    color: var(--text-on-canvas-soft);
+    margin: 0;
+  }
+  header.hero p b { color: var(--text-on-canvas); font-weight: 600; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 860px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: var(--radius-card);
+    padding: 26px 26px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+    box-shadow: 0 24px 48px -24px rgba(0,0,0,0.5);
+  }
+  .panel h2 {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-weight: 700;
+    font-size: 28px;
+    margin: 0 0 2px;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .panel .sub {
+    font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; margin: 0;
+  }
+
+  .drop {
+    border: 1.5px dashed var(--paper-line);
+    border-radius: var(--radius-card);
+    padding: 22px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+    font-size: 13.5px; color: var(--ink-soft);
+  }
+  .drop:hover, .drop.drag { border-color: var(--amber-deep); background: rgba(231,162,58,0.08); }
+  .drop b { color: var(--ink); }
+  .drop input { display: none; }
+
+  .filelist { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
+  .fitem {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid var(--paper-line);
+    border-radius: 3px; padding: 7px 9px;
+    font-size: 13px;
+  }
+  .fitem .thumb {
+    width: 30px; height: 30px; border-radius: 2px; object-fit: cover;
+    background: #ddd3b6; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink-soft);
+  }
+  .fitem .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fitem .size { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); flex: none; }
+  .fitem button {
+    border: none; background: transparent; cursor: pointer;
+    color: var(--ink-soft); font-size: 14px; padding: 2px 4px; line-height: 1;
+    flex: none;
+  }
+  .fitem button:hover { color: var(--coral); }
+  .fitem .order { display: flex; flex-direction: column; gap: 0; flex: none; }
+  .fitem .order button { font-size: 10px; padding: 0 3px; }
+
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  label.field { font-size: 12.5px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 4px; }
+  .num-input {
+    font-family: 'IBM Plex Mono', monospace; font-size: 14px;
+    border: 1px solid var(--paper-line); border-radius: 3px;
+    padding: 7px 8px; width: 90px; background: #fff; color: var(--ink);
+  }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+  .toggle-row input { accent-color: var(--amber-deep); width: 15px; height: 15px; }
+
+  .btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 14px;
+    border: none; border-radius: 3px;
+    padding: 11px 18px; cursor: pointer;
+    background: var(--amber); color: #241505;
+    transition: transform .08s ease, background .15s ease;
+  }
+  .btn:hover:not(:disabled) { background: var(--amber-deep); }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--paper-line); }
+  .btn.secondary:hover:not(:disabled) { border-color: var(--ink-soft); background: rgba(0,0,0,0.03); }
+
+  .status { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink-soft); min-height: 16px; }
+  .status.err { color: var(--coral); }
+  .status.ok { color: var(--good); }
+
+  .result {
+    border-top: 1px solid var(--paper-line); padding-top: 14px;
+    display: none; flex-direction: column; gap: 10px;
+  }
+  .result.show { display: flex; }
+  .result .sizeline {
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink);
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .result .sizeline .big { font-size: 20px; font-weight: 600; }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 20px; letter-spacing: 0.02em;
+  }
+  .badge.ok { background: rgba(79,143,107,0.16); color: var(--good); }
+  .badge.warn { background: rgba(217,105,79,0.15); color: var(--coral); }
+  .preview-frame {
+    width: 100%; height: 220px; border: 1px solid var(--paper-line); border-radius: 3px;
+    background: #fff;
+  }
+
+  .modebar { display: flex; gap: 6px; }
+  .modebar button {
+    flex: 1; font-size: 12.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+    padding: 8px 6px; border-radius: 3px; border: 1px solid var(--paper-line);
+    background: #fff; color: var(--ink-soft); cursor: pointer;
+  }
+  .modebar button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .manual-block { display: none; flex-direction: column; gap: 10px; }
+  .manual-block.show { display: flex; }
+  .slider-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-soft); }
+  .slider-field input[type=range] { accent-color: var(--amber-deep); }
+  .slider-field .val { font-family: 'IBM Plex Mono', monospace; color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 40px; padding-top: 20px;
+    border-top: 1px solid rgba(237,239,231,0.14);
+    font-size: 12.5px; color: var(--text-on-canvas-soft); line-height: 1.6;
+    max-width: 74ch;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --canvas: #0F2B2A;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">FILE → PDF, RIGHT-SIZED</div>
+    <h1 class="title">PDF Press</h1>
+    <p>Drop in images or text files and press them into one PDF, or feed in an existing PDF and squeeze it under a size limit — <b>500&nbsp;KB by default</b>, whatever you need.</p>
+  </header>
+
+  <div class="panels">
+
+    <!-- COMBINE PANEL -->
+    <section class="panel" id="panel-combine">
+      <div>
+        <h2>Combine into a PDF</h2>
+        <p class="sub">Images (JPG, PNG, WebP, GIF) and plain-text files (.txt .md .csv .json .html .log) — dropped in the order they'll appear, reorderable below.</p>
+      </div>
+
+      <div class="drop" id="drop-combine">
+        <div><b>Drop files here</b> or click to choose</div>
+        <input type="file" id="input-combine" multiple accept="image/*,.txt,.md,.csv,.json,.html,.log">
+      </div>
+
+      <div class="filelist" id="list-combine"></div>
+
+      <div class="row">
+        <label class="toggle-row">
+          <input type="checkbox" id="combine-shrink-toggle">
+          Shrink result to under
+        </label>
+        <input type="number" class="num-input" id="combine-target-kb" value="500" min="20" step="10"> KB
+      </div>
+
+      <button class="btn" id="btn-combine" disabled>Create PDF</button>
+      <div class="status" id="status-combine"></div>
+
+      <div class="result" id="result-combine">
+        <div class="sizeline">
+          <span class="big" id="combine-final-size">—</span>
+          <span class="badge" id="combine-badge"></span>
+        </div>
+        <iframe class="preview-frame" id="combine-preview"></iframe>
+        <div class="row">
+          <button class="btn" id="combine-save">Save PDF</button>
+          <button class="btn secondary" id="combine-send-shrink">Send to shrink tool →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHRINK PANEL -->
+    <section class="panel" id="panel-shrink">
+      <div>
+        <h2>Shrink a PDF</h2>
+        <p class="sub">Pull any PDF under a size limit by re-rendering its pages at a lower quality and resolution. Auto-fit a target, or set quality and resolution yourself.</p>
+      </div>
+
+      <div class="drop" id="drop-shrink">
+        <div><b>Drop a PDF here</b> or click to choose</div>
+        <input type="file" id="input-shrink" accept="application/pdf,.pdf">
+      </div>
+
+      <div class="filelist" id="list-shrink"></div>
+
+      <div class="modebar">
+        <button type="button" class="active" id="mode-auto">Auto-fit target</button>
+        <button type="button" id="mode-manual">Manual override</button>
+      </div>
+
+      <div class="row" id="auto-block">
+        <label class="field">Target size
+          <input type="number" class="num-input" id="shrink-target-kb" value="500" min="20" step="10">
+        </label>
+        <span style="font-size:12.5px;color:var(--ink-soft)">KB — we'll lower quality until it fits, or stop at the floor and tell you.</span>
+      </div>
+
+      <div class="manual-block" id="manual-block">
+        <div class="slider-field">
+          <span>JPEG quality: <span class="val" id="quality-val">75%</span></span>
+          <input type="range" id="quality-slider" min="20" max="95" value="75">
+        </div>
+        <div class="slider-field">
+          <span>Resolution scale: <span class="val" id="scale-val">100%</span></span>
+          <input type="range" id="scale-slider" min="40" max="200" value="100">
+        </div>
+      </div>
+
+      <button class="btn" id="btn-shrink" disabled>Shrink PDF</button>
+      <div class="status" id="status-shrink"></div>
+
+      <div class="result" id="result-shrink">
+        <div class="sizeline">
+          <span id="shrink-orig-size">—</span>
+          <span>→</span>
+          <span class="big" id="shrink-final-size">—</span>
+          <span class="badge" id="shrink-badge"></span>
+        </div>
+        <iframe class="preview-frame" id="shrink-preview"></iframe>
+        <button class="btn" id="shrink-save">Save PDF</button>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    Runs entirely in your browser — nothing you drop here is uploaded anywhere. Supported inputs: raster images, plain-text-based files, and existing PDFs. Formats like Word or PowerPoint aren't parsed directly; export those to PDF first, then shrink here.
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const { jsPDF } = window.jspdf;
+
+  function fmtSize(bytes){
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + " KB";
+    return (bytes/(1024*1024)).toFixed(2) + " MB";
+  }
+  function readFileAsDataURL(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+  function readFileAsText(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsText(file);
+    });
+  }
+  function readFileAsArrayBuffer(file){
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsArrayBuffer(file);
+    });
+  }
+  function loadImage(src){
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = rej;
+      img.src = src;
+    });
+  }
+
+  // ---------- shared: render an existing PDF's pages to JPEG images, rebuild at a given quality/scale ----------
+  async function renderPdfPages(pdfBytes, scale){
+    const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++){
+      const page = await doc.getPage(i);
+      const viewport = page.getViewport({ scale: scale * 2 }); // 2 = base render density
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const ptViewport = page.getViewport({ scale: 1 });
+      pages.push({ canvas, widthPt: ptViewport.width, heightPt: ptViewport.height });
+    }
+    return pages;
+  }
+
+  function buildPdfFromCanvasPages(pages, quality){
+    let doc = null;
+    pages.forEach((p, idx) => {
+      const orientation = p.widthPt > p.heightPt ? "l" : "p";
+      if (idx === 0){
+        doc = new jsPDF({ orientation, unit: "pt", format: [p.widthPt, p.heightPt] });
+      } else {
+        doc.addPage([p.widthPt, p.heightPt], orientation);
+      }
+      const dataUrl = p.canvas.toDataURL("image/jpeg", quality);
+      doc.addImage(dataUrl, "JPEG", 0, 0, p.widthPt, p.heightPt);
+    });
+    return doc;
+  }
+
+  async function compressToTarget(pdfBytes, targetBytes, onStep){
+    let scale = 1.0, quality = 0.82;
+    let lastBytes = pdfBytes, lastQuality = 1, lastScale = 1, achieved = false;
+    for (let iter = 0; iter < 9; iter++){
+      onStep && onStep(iter, quality, scale);
+      const pages = await renderPdfPages(pdfBytes, scale);
+      const doc = buildPdfFromCanvasPages(pages, quality);
+      const out = doc.output("arraybuffer");
+      lastBytes = out; lastQuality = quality; lastScale = scale;
+      if (out.byteLength <= targetBytes){ achieved = true; break; }
+      if (quality > 0.35) quality = Math.max(0.35, quality - 0.12);
+      else if (scale > 0.45) scale = Math.max(0.45, scale * 0.8);
+      else break; // floor reached
+    }
+    return { bytes: lastBytes, achieved, quality: lastQuality, scale: lastScale };
+  }
+
+  async function compressManual(pdfBytes, quality, scale){
+    const pages = await renderPdfPages(pdfBytes, scale);
+    const doc = buildPdfFromCanvasPages(pages, quality);
+    return doc.output("arraybuffer");
+  }
+
+  function saveBytes(bytes, filename, btn){
+    const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  // ================= COMBINE PANEL =================
+  const combineFiles = []; // {file, kind:'image'|'text', name, size}
+  const dropCombine = document.getElementById("drop-combine");
+  const inputCombine = document.getElementById("input-combine");
+  const listCombine = document.getElementById("list-combine");
+  const btnCombine = document.getElementById("btn-combine");
+  const statusCombine = document.getElementById("status-combine");
+  const resultCombine = document.getElementById("result-combine");
+  let combineOutputBytes = null;
+
+  function isTextFile(file){
+    return /\.(txt|md|csv|json|html|log)$/i.test(file.name);
+  }
+
+  function renderCombineList(){
+    listCombine.innerHTML = "";
+    combineFiles.forEach((item, idx) => {
+      const row = document.createElement("div");
+      row.className = "fitem";
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+      if (item.kind === "image" && item.previewUrl){
+        const img = document.createElement("img");
+        img.src = item.previewUrl;
+        img.className = "thumb";
+        img.style.objectFit = "cover";
+        row.appendChild(img);
+      } else {
+        thumb.textContent = "TXT";
+        row.appendChild(thumb);
+      }
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = item.name;
+      const size = document.createElement("div");
+      size.className = "size";
+      size.textContent = fmtSize(item.size);
+      const order = document.createElement("div");
+      order.className = "order";
+      const up = document.createElement("button"); up.textContent = "▲";
+      up.onclick = () => { if (idx>0){ [combineFiles[idx-1],combineFiles[idx]]=[combineFiles[idx],combineFiles[idx-1]]; renderCombineList(); } };
+      const down = document.createElement("button"); down.textContent = "▼";
+      down.onclick = () => { if (idx<combineFiles.length-1){ [combineFiles[idx+1],combineFiles[idx]]=[combineFiles[idx],combineFiles[idx+1]]; renderCombineList(); } };
+      order.appendChild(up); order.appendChild(down);
+      const del = document.createElement("button");
+      del.textContent = "✕";
+      del.onclick = () => { combineFiles.splice(idx,1); renderCombineList(); };
+      row.appendChild(name); row.appendChild(size); row.appendChild(order); row.appendChild(del);
+      listCombine.appendChild(row);
+    });
+    btnCombine.disabled = combineFiles.length === 0;
+  }
+
+  async function addCombineFiles(fileList){
+    for (const file of Array.from(fileList)){
+      if (file.type.startsWith("image/")){
+        const url = await readFileAsDataURL(file);
+        combineFiles.push({ file, kind: "image", name: file.name, size: file.size, previewUrl: url });
+      } else if (isTextFile(file)){
+        const text = await readFileAsText(file);
+        combineFiles.push({ file, kind: "text", name: file.name, size: file.size, text });
+      } else {
+        statusCombine.textContent = `Skipped ${file.name} — unsupported type.`;
+        statusCombine.className = "status err";
+      }
+    }
+    renderCombineList();
+  }
+
+  dropCombine.addEventListener("click", () => inputCombine.click());
+  inputCombine.addEventListener("change", (e) => addCombineFiles(e.target.files));
+  ["dragover"].forEach(ev => dropCombine.addEventListener(ev, e => { e.preventDefault(); dropCombine.classList.add("drag"); }));
+  ["dragleave","drop"].forEach(ev => dropCombine.addEventListener(ev, e => { e.preventDefault(); dropCombine.classList.remove("drag"); }));
+  dropCombine.addEventListener("drop", e => addCombineFiles(e.dataTransfer.files));
+
+  function buildTextPages(doc, text, isFirstPage){
+    const pageW = 595.28, pageH = 841.89, margin = 48;
+    if (!isFirstPage) doc.addPage([pageW, pageH], "p");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    const lines = doc.splitTextToSize(text, pageW - margin*2);
+    const lineHeight = 14;
+    let y = margin;
+    for (const line of lines){
+      if (y > pageH - margin){
+        doc.addPage([pageW, pageH], "p");
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += lineHeight;
+    }
+  }
+
+  btnCombine.addEventListener("click", async () => {
+    btnCombine.disabled = true;
+    statusCombine.className = "status";
+    statusCombine.textContent = "Laying out pages…";
+    resultCombine.classList.remove("show");
+    try {
+      let doc = null;
+      const pageW = 595.28, pageH = 841.89; // A4 pt
+      let firstPageUsed = false;
+
+      for (const item of combineFiles){
+        if (item.kind === "image"){
+          const img = await loadImage(item.previewUrl);
+          // fit image to A4 with margin, preserve aspect
+          const margin = 24;
+          const maxW = pageW - margin*2, maxH = pageH - margin*2;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const w = img.width * ratio, h = img.height * ratio;
+          const x = (pageW - w)/2, y = (pageH - h)/2;
+          // re-encode via canvas to a reasonable JPEG so output stays lean
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width; canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.drawImage(img, 0, 0);
+          const jpegUrl = canvas.toDataURL("image/jpeg", 0.88);
+          if (!doc){ doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); firstPageUsed = true; }
+          else doc.addPage("a4", "p");
+          doc.addImage(jpegUrl, "JPEG", x, y, w, h);
+        } else {
+          if (!doc){ doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); firstPageUsed = true; buildTextPages(doc, item.text, true); }
+          else buildTextPages(doc, item.text, false);
+        }
+      }
+
+      if (!doc) throw new Error("no-files");
+
+      let outBytes = doc.output("arraybuffer");
+      const shrinkOn = document.getElementById("combine-shrink-toggle").checked;
+      const targetKb = parseInt(document.getElementById("combine-target-kb").value, 10) || 500;
+      const targetBytes = targetKb * 1024;
+      let achieved = true;
+
+      if (shrinkOn && outBytes.byteLength > targetBytes){
+        statusCombine.textContent = "Shrinking to fit target…";
+        const res = await compressToTarget(outBytes, targetBytes, (i,q,s) => {
+          statusCombine.textContent = `Shrinking… pass ${i+1} (quality ${Math.round(q*100)}%, scale ${Math.round(s*100)}%)`;
+        });
+        outBytes = res.bytes; achieved = res.achieved;
+      }
+
+      combineOutputBytes = outBytes;
+      const blob = new Blob([outBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      document.getElementById("combine-preview").src = url;
+      document.getElementById("combine-final-size").textContent = fmtSize(outBytes.byteLength);
+      const badge = document.getElementById("combine-badge");
+      if (shrinkOn){
+        badge.textContent = achieved ? "under target" : "floor reached";
+        badge.className = "badge " + (achieved ? "ok" : "warn");
+      } else {
+        badge.textContent = "";
+        badge.className = "badge";
+      }
+      resultCombine.classList.add("show");
+      statusCombine.textContent = "";
+    } catch(err){
+      statusCombine.className = "status err";
+      statusCombine.textContent = "Couldn't build the PDF — check your files and try again.";
+    } finally {
+      btnCombine.disabled = false;
+    }
+  });
+
+  document.getElementById("combine-save").addEventListener("click", (e) => {
+    if (combineOutputBytes) saveBytes(combineOutputBytes, "combined.pdf", e.target);
+  });
+  document.getElementById("combine-send-shrink").addEventListener("click", () => {
+    if (!combineOutputBytes) return;
+    loadIntoShrink(combineOutputBytes.slice(0), "combined.pdf");
+    document.getElementById("panel-shrink").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // ================= SHRINK PANEL =================
+  const dropShrink = document.getElementById("drop-shrink");
+  const inputShrink = document.getElementById("input-shrink");
+  const listShrink = document.getElementById("list-shrink");
+  const btnShrink = document.getElementById("btn-shrink");
+  const statusShrink = document.getElementById("status-shrink");
+  const resultShrink = document.getElementById("result-shrink");
+  let shrinkInputBytes = null, shrinkInputName = "document.pdf", shrinkOutputBytes = null;
+
+  function loadIntoShrink(bytes, name){
+    shrinkInputBytes = bytes;
+    shrinkInputName = name;
+    listShrink.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "fitem";
+    const thumb = document.createElement("div"); thumb.className = "thumb"; thumb.textContent = "PDF";
+    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = name;
+    const sz = document.createElement("div"); sz.className = "size"; sz.textContent = fmtSize(bytes.byteLength);
+    row.appendChild(thumb); row.appendChild(nm); row.appendChild(sz);
+    listShrink.appendChild(row);
+    btnShrink.disabled = false;
+    resultShrink.classList.remove("show");
+  }
+
+  async function addShrinkFile(file){
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf"){
+      statusShrink.className = "status err";
+      statusShrink.textContent = "That doesn't look like a PDF.";
+      return;
+    }
+    const buf = await readFileAsArrayBuffer(file);
+    loadIntoShrink(buf, file.name);
+    statusShrink.textContent = "";
+  }
+
+  dropShrink.addEventListener("click", () => inputShrink.click());
+  inputShrink.addEventListener("change", (e) => addShrinkFile(e.target.files[0]));
+  ["dragover"].forEach(ev => dropShrink.addEventListener(ev, e => { e.preventDefault(); dropShrink.classList.add("drag"); }));
+  ["dragleave","drop"].forEach(ev => dropShrink.addEventListener(ev, e => { e.preventDefault(); dropShrink.classList.remove("drag"); }));
+  dropShrink.addEventListener("drop", e => { e.preventDefault(); addShrinkFile(e.dataTransfer.files[0]); });
+
+  const modeAuto = document.getElementById("mode-auto");
+  const modeManual = document.getElementById("mode-manual");
+  const autoBlock = document.getElementById("auto-block");
+  const manualBlock = document.getElementById("manual-block");
+  let shrinkMode = "auto";
+  modeAuto.addEventListener("click", () => { shrinkMode = "auto"; modeAuto.classList.add("active"); modeManual.classList.remove("active"); autoBlock.style.display="flex"; manualBlock.classList.remove("show"); });
+  modeManual.addEventListener("click", () => { shrinkMode = "manual"; modeManual.classList.add("active"); modeAuto.classList.remove("active"); autoBlock.style.display="none"; manualBlock.classList.add("show"); });
+
+  const qualitySlider = document.getElementById("quality-slider");
+  const scaleSlider = document.getElementById("scale-slider");
+  qualitySlider.addEventListener("input", () => document.getElementById("quality-val").textContent = qualitySlider.value + "%");
+  scaleSlider.addEventListener("input", () => document.getElementById("scale-val").textContent = scaleSlider.value + "%");
+
+  btnShrink.addEventListener("click", async () => {
+    if (!shrinkInputBytes) return;
+    btnShrink.disabled = true;
+    statusShrink.className = "status";
+    resultShrink.classList.remove("show");
+    try {
+      const origSize = shrinkInputBytes.byteLength;
+      let outBytes, achieved = true;
+      if (shrinkMode === "auto"){
+        const targetKb = parseInt(document.getElementById("shrink-target-kb").value, 10) || 500;
+        const targetBytes = targetKb * 1024;
+        const res = await compressToTarget(shrinkInputBytes.slice(0), targetBytes, (i,q,s) => {
+          statusShrink.textContent = `Pass ${i+1}: quality ${Math.round(q*100)}%, scale ${Math.round(s*100)}%…`;
+        });
+        outBytes = res.bytes; achieved = res.achieved;
+      } else {
+        statusShrink.textContent = "Rendering at your settings…";
+        const q = parseInt(qualitySlider.value, 10) / 100;
+        const s = parseInt(scaleSlider.value, 10) / 100;
+        outBytes = await compressManual(shrinkInputBytes.slice(0), q, s);
+        achieved = true;
+      }
+      shrinkOutputBytes = outBytes;
+      const blob = new Blob([outBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      document.getElementById("shrink-preview").src = url;
+      document.getElementById("shrink-orig-size").textContent = fmtSize(origSize);
+      document.getElementById("shrink-final-size").textContent = fmtSize(outBytes.byteLength);
+      const badge = document.getElementById("shrink-badge");
+      if (shrinkMode === "auto"){
+        badge.textContent = achieved ? "target hit" : "floor reached";
+        badge.className = "badge " + (achieved ? "ok" : "warn");
+      } else {
+        badge.textContent = "manual";
+        badge.className = "badge ok";
+      }
+      resultShrink.classList.add("show");
+      statusShrink.textContent = "";
+    } catch(err){
+      statusShrink.className = "status err";
+      statusShrink.textContent = "Couldn't process that PDF — it may be encrypted or corrupted.";
+    } finally {
+      btnShrink.disabled = false;
+    }
+  });
+
+  document.getElementById("shrink-save").addEventListener("click", (e) => {
+    if (shrinkOutputBytes){
+      const base = shrinkInputName.replace(/\.pdf$/i, "");
+      saveBytes(shrinkOutputBytes, base + "-compressed.pdf", e.target);
+    }
+  });
+})();
+</script>
+</body>
+</html>
