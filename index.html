@@ -62,7 +62,7 @@
     letter-spacing: 0.2px;
   }
   header.hero p {
-    max-width: 62ch;
+    max-width: 66ch;
     font-size: 16px; line-height: 1.6;
     color: var(--text-on-canvas-soft);
     margin: 0;
@@ -122,7 +122,7 @@
     width: 30px; height: 30px; border-radius: 2px; object-fit: cover;
     background: #ddd3b6; flex: none;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink-soft);
   }
   .fitem .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fitem .size { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); flex: none; }
@@ -201,14 +201,9 @@
     margin-top: 40px; padding-top: 20px;
     border-top: 1px solid rgba(237,239,231,0.14);
     font-size: 12.5px; color: var(--text-on-canvas-soft); line-height: 1.6;
-    max-width: 74ch;
+    max-width: 76ch;
   }
-
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --canvas: #0F2B2A;
-    }
-  }
+  footer b { color: var(--text-on-canvas); }
 </style>
 </head>
 <body>
@@ -217,7 +212,7 @@
   <header class="hero">
     <div class="kicker">FILE → PDF, RIGHT-SIZED</div>
     <h1 class="title">PDF Press</h1>
-    <p>Drop in images or text files and press them into one PDF, or feed in an existing PDF and squeeze it under a size limit — <b>500&nbsp;KB by default</b>, whatever you need.</p>
+    <p>Drop in images, text, Word, Excel or PowerPoint files and press them into one PDF, or feed in an existing PDF and squeeze it under a size limit — <b>500&nbsp;KB by default</b>, whatever you need.</p>
   </header>
 
   <div class="panels">
@@ -226,12 +221,12 @@
     <section class="panel" id="panel-combine">
       <div>
         <h2>Combine into a PDF</h2>
-        <p class="sub">Images (JPG, PNG, WebP, GIF) and plain-text files (.txt .md .csv .json .html .log) — dropped in the order they'll appear, reorderable below.</p>
+        <p class="sub">Images, plain-text files, and modern Office files (.docx, .xlsx, .pptx) — dropped in the order they'll appear, reorderable below.</p>
       </div>
 
       <div class="drop" id="drop-combine">
         <div><b>Drop files here</b> or click to choose</div>
-        <input type="file" id="input-combine" multiple accept="image/*,.txt,.md,.csv,.json,.html,.log">
+        <input type="file" id="input-combine" multiple accept="image/*,.txt,.md,.csv,.json,.html,.log,.docx,.xlsx,.pptx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation">
       </div>
 
       <div class="filelist" id="list-combine"></div>
@@ -315,18 +310,28 @@
   </div>
 
   <footer>
-    Runs entirely in your browser — nothing you drop here is uploaded anywhere. Supported inputs: raster images, plain-text-based files, and existing PDFs. Formats like Word or PowerPoint aren't parsed directly; export those to PDF first, then shrink here.
+    Runs entirely in your browser — nothing you drop here is uploaded anywhere. Word, Excel and PowerPoint support covers the modern <b>.docx / .xlsx / .pptx</b> formats only (not legacy .doc / .xls / .ppt). Word and Excel files keep their text, tables and images; PowerPoint files are converted as one page of extracted text per slide — slide visuals, images and exact layout aren't preserved.
   </footer>
 
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (function(){
   "use strict";
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   const { jsPDF } = window.jspdf;
+
+  const PAGE_W_PX = 794;   // A4 width @ 96dpi
+  const PAGE_H_PX = 1123;  // A4 height @ 96dpi
+  const PAGE_W_PT = 595.28;
+  const PAGE_H_PT = 841.89;
+  const RENDER_SCALE = 1.5;
 
   function fmtSize(bytes){
     if (bytes < 1024) return bytes + " B";
@@ -365,6 +370,17 @@
       img.src = src;
     });
   }
+  function saveBytes(bytes, filename){
+    const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
 
   // ---------- shared: render an existing PDF's pages to JPEG images, rebuild at a given quality/scale ----------
   async function renderPdfPages(pdfBytes, scale){
@@ -372,7 +388,7 @@
     const pages = [];
     for (let i = 1; i <= doc.numPages; i++){
       const page = await doc.getPage(i);
-      const viewport = page.getViewport({ scale: scale * 2 }); // 2 = base render density
+      const viewport = page.getViewport({ scale: scale * 2 });
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(viewport.width));
       canvas.height = Math.max(1, Math.round(viewport.height));
@@ -413,7 +429,7 @@
       if (out.byteLength <= targetBytes){ achieved = true; break; }
       if (quality > 0.35) quality = Math.max(0.35, quality - 0.12);
       else if (scale > 0.45) scale = Math.max(0.45, scale * 0.8);
-      else break; // floor reached
+      else break;
     }
     return { bytes: lastBytes, achieved, quality: lastQuality, scale: lastScale };
   }
@@ -424,20 +440,162 @@
     return doc.output("arraybuffer");
   }
 
-  function saveBytes(bytes, filename, btn){
-    const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // ---------- office-document pipeline: render an offscreen HTML page, rasterize, slice into PDF pages ----------
+  function makeOffscreenContainer(widthPx){
+    const el = document.createElement("div");
+    el.style.position = "fixed";
+    el.style.left = "-10000px";
+    el.style.top = "0";
+    el.style.width = widthPx + "px";
+    el.style.background = "#ffffff";
+    el.style.color = "#17211E";
+    el.style.fontFamily = "Georgia, 'Times New Roman', serif";
+    el.style.fontSize = "14px";
+    el.style.lineHeight = "1.5";
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function sliceCanvasToPages(bigCanvas, scale){
+    const chunkH = Math.round(PAGE_H_PX * scale);
+    const totalH = bigCanvas.height;
+    const pages = [];
+    let y = 0;
+    while (y < totalH){
+      const h = Math.min(chunkH, totalH - y);
+      const c = document.createElement("canvas");
+      c.width = bigCanvas.width;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(bigCanvas, 0, y, bigCanvas.width, h, 0, 0, bigCanvas.width, h);
+      const heightPt = PAGE_H_PT * (h / chunkH);
+      pages.push({ canvas: c, widthPt: PAGE_W_PT, heightPt });
+      y += h;
+    }
+    return pages;
+  }
+
+  async function renderContainerToPages(container){
+    const canvas = await html2canvas(container, { scale: RENDER_SCALE, backgroundColor: "#ffffff" });
+    document.body.removeChild(container);
+    return sliceCanvasToPages(canvas, RENDER_SCALE);
+  }
+
+  async function convertDocxToPages(arrayBuffer){
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+    const container = makeOffscreenContainer(PAGE_W_PX);
+    const inner = document.createElement("div");
+    inner.style.padding = "56px 48px";
+    inner.innerHTML = result.value || "<p><em>(empty document)</em></p>";
+    inner.querySelectorAll("img").forEach(img => { img.style.maxWidth = "100%"; });
+    inner.querySelectorAll("table").forEach(t => { t.style.borderCollapse = "collapse"; t.style.width = "100%"; });
+    inner.querySelectorAll("td,th").forEach(c => { c.style.border = "1px solid #999"; c.style.padding = "4px 6px"; c.style.fontSize = "12px"; });
+    container.appendChild(inner);
+    return renderContainerToPages(container);
+  }
+
+  async function convertXlsxToPages(arrayBuffer){
+    const wb = XLSX.read(arrayBuffer, { type: "array" });
+    const container = makeOffscreenContainer(PAGE_W_PX);
+    const inner = document.createElement("div");
+    inner.style.padding = "40px 32px";
+    container.appendChild(inner);
+
+    wb.SheetNames.forEach((sheetName, idx) => {
+      const heading = document.createElement("h3");
+      heading.textContent = sheetName;
+      heading.style.fontFamily = "Inter, sans-serif";
+      heading.style.margin = "0 0 10px";
+      inner.appendChild(heading);
+
+      const html = XLSX.utils.sheet_to_html(wb.Sheets[sheetName]);
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      const table = wrapper.querySelector("table");
+      if (table){
+        table.style.borderCollapse = "collapse";
+        table.style.width = "100%";
+        table.querySelectorAll("td,th").forEach(c => {
+          c.style.border = "1px solid #999";
+          c.style.padding = "3px 6px";
+          c.style.fontSize = "11px";
+          c.style.fontFamily = "'IBM Plex Mono', monospace";
+        });
+        inner.appendChild(table);
+      } else {
+        const p = document.createElement("p");
+        p.textContent = "(empty sheet)";
+        p.style.fontStyle = "italic";
+        inner.appendChild(p);
+      }
+
+      if (idx < wb.SheetNames.length - 1){
+        const currentHeightPx = inner.scrollHeight;
+        const remainder = (PAGE_H_PX - (currentHeightPx % PAGE_H_PX)) % PAGE_H_PX;
+        const spacer = document.createElement("div");
+        spacer.style.height = remainder + "px";
+        inner.appendChild(spacer);
+      }
+    });
+
+    return renderContainerToPages(container);
+  }
+
+  async function convertPptxToPages(arrayBuffer){
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const slideFiles = Object.keys(zip.files)
+      .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a,b) => parseInt(a.match(/slide(\d+)\.xml/)[1],10) - parseInt(b.match(/slide(\d+)\.xml/)[1],10));
+
+    if (slideFiles.length === 0) throw new Error("no-slides");
+
+    const container = makeOffscreenContainer(PAGE_W_PX);
+
+    for (let i = 0; i < slideFiles.length; i++){
+      const xml = await zip.files[slideFiles[i]].async("text");
+      const texts = Array.from(xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)).map(m => m[1]);
+
+      const slideDiv = document.createElement("div");
+      slideDiv.style.height = PAGE_H_PX + "px";
+      slideDiv.style.boxSizing = "border-box";
+      slideDiv.style.padding = "48px 44px";
+      slideDiv.style.overflow = "hidden";
+      slideDiv.style.display = "flex";
+      slideDiv.style.flexDirection = "column";
+      slideDiv.style.gap = "10px";
+      slideDiv.style.fontFamily = "Inter, sans-serif";
+
+      const label = document.createElement("div");
+      label.textContent = "SLIDE " + (i + 1);
+      label.style.fontFamily = "'IBM Plex Mono', monospace";
+      label.style.fontSize = "11px";
+      label.style.color = "#999";
+      slideDiv.appendChild(label);
+
+      if (texts.length === 0){
+        const p = document.createElement("p");
+        p.textContent = "(no extractable text on this slide)";
+        p.style.fontStyle = "italic";
+        p.style.color = "#888";
+        slideDiv.appendChild(p);
+      } else {
+        texts.forEach((t, idx) => {
+          const el = document.createElement(idx === 0 ? "h2" : "p");
+          el.textContent = t;
+          if (idx === 0){ el.style.fontFamily = "'Big Shoulders Display', sans-serif"; el.style.fontSize = "26px"; el.style.margin = "0 0 6px"; }
+          else { el.style.margin = "0 0 4px"; el.style.fontSize = "15px"; }
+          slideDiv.appendChild(el);
+        });
+      }
+      container.appendChild(slideDiv);
+    }
+
+    return renderContainerToPages(container);
   }
 
   // ================= COMBINE PANEL =================
-  const combineFiles = []; // {file, kind:'image'|'text', name, size}
+  const combineFiles = [];
   const dropCombine = document.getElementById("drop-combine");
   const inputCombine = document.getElementById("input-combine");
   const listCombine = document.getElementById("list-combine");
@@ -446,8 +604,14 @@
   const resultCombine = document.getElementById("result-combine");
   let combineOutputBytes = null;
 
-  function isTextFile(file){
-    return /\.(txt|md|csv|json|html|log)$/i.test(file.name);
+  function classifyFile(file){
+    const name = file.name.toLowerCase();
+    if (file.type.startsWith("image/")) return "image";
+    if (/\.(txt|md|csv|json|html|log)$/.test(name)) return "text";
+    if (/\.docx$/.test(name)) return "docx";
+    if (/\.xlsx$/.test(name)) return "xlsx";
+    if (/\.pptx$/.test(name)) return "pptx";
+    return null;
   }
 
   function renderCombineList(){
@@ -455,8 +619,6 @@
     combineFiles.forEach((item, idx) => {
       const row = document.createElement("div");
       row.className = "fitem";
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
       if (item.kind === "image" && item.previewUrl){
         const img = document.createElement("img");
         img.src = item.previewUrl;
@@ -464,7 +626,9 @@
         img.style.objectFit = "cover";
         row.appendChild(img);
       } else {
-        thumb.textContent = "TXT";
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+        thumb.textContent = item.kind.toUpperCase();
         row.appendChild(thumb);
       }
       const name = document.createElement("div");
@@ -491,12 +655,16 @@
 
   async function addCombineFiles(fileList){
     for (const file of Array.from(fileList)){
-      if (file.type.startsWith("image/")){
+      const kind = classifyFile(file);
+      if (kind === "image"){
         const url = await readFileAsDataURL(file);
-        combineFiles.push({ file, kind: "image", name: file.name, size: file.size, previewUrl: url });
-      } else if (isTextFile(file)){
+        combineFiles.push({ file, kind, name: file.name, size: file.size, previewUrl: url });
+      } else if (kind === "text"){
         const text = await readFileAsText(file);
-        combineFiles.push({ file, kind: "text", name: file.name, size: file.size, text });
+        combineFiles.push({ file, kind, name: file.name, size: file.size, text });
+      } else if (kind === "docx" || kind === "xlsx" || kind === "pptx"){
+        const buf = await readFileAsArrayBuffer(file);
+        combineFiles.push({ file, kind, name: file.name, size: file.size, buffer: buf });
       } else {
         statusCombine.textContent = `Skipped ${file.name} — unsupported type.`;
         statusCombine.className = "status err";
@@ -512,7 +680,7 @@
   dropCombine.addEventListener("drop", e => addCombineFiles(e.dataTransfer.files));
 
   function buildTextPages(doc, text, isFirstPage){
-    const pageW = 595.28, pageH = 841.89, margin = 48;
+    const pageW = PAGE_W_PT, pageH = PAGE_H_PT, margin = 48;
     if (!isFirstPage) doc.addPage([pageW, pageH], "p");
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
@@ -529,42 +697,60 @@
     }
   }
 
+  function addCanvasPagesToDoc(docRef, pages, quality){
+    pages.forEach(p => {
+      const orientation = p.widthPt > p.heightPt ? "l" : "p";
+      if (!docRef.__started){
+        docRef.doc = new jsPDF({ orientation, unit: "pt", format: [p.widthPt, p.heightPt] });
+        docRef.__started = true;
+      } else {
+        docRef.doc.addPage([p.widthPt, p.heightPt], orientation);
+      }
+      const dataUrl = p.canvas.toDataURL("image/jpeg", quality);
+      docRef.doc.addImage(dataUrl, "JPEG", 0, 0, p.widthPt, p.heightPt);
+    });
+  }
+
   btnCombine.addEventListener("click", async () => {
     btnCombine.disabled = true;
     statusCombine.className = "status";
     statusCombine.textContent = "Laying out pages…";
     resultCombine.classList.remove("show");
     try {
-      let doc = null;
-      const pageW = 595.28, pageH = 841.89; // A4 pt
-      let firstPageUsed = false;
+      const docRef = { doc: null, __started: false };
 
       for (const item of combineFiles){
         if (item.kind === "image"){
           const img = await loadImage(item.previewUrl);
-          // fit image to A4 with margin, preserve aspect
           const margin = 24;
-          const maxW = pageW - margin*2, maxH = pageH - margin*2;
+          const maxW = PAGE_W_PT - margin*2, maxH = PAGE_H_PT - margin*2;
           const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
           const w = img.width * ratio, h = img.height * ratio;
-          const x = (pageW - w)/2, y = (pageH - h)/2;
-          // re-encode via canvas to a reasonable JPEG so output stays lean
+          const x = (PAGE_W_PT - w)/2, y = (PAGE_H_PT - h)/2;
           const canvas = document.createElement("canvas");
           canvas.width = img.width; canvas.height = img.height;
           const ctx = canvas.getContext("2d");
           ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
           ctx.drawImage(img, 0, 0);
           const jpegUrl = canvas.toDataURL("image/jpeg", 0.88);
-          if (!doc){ doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); firstPageUsed = true; }
-          else doc.addPage("a4", "p");
-          doc.addImage(jpegUrl, "JPEG", x, y, w, h);
+          if (!docRef.__started){ docRef.doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); docRef.__started = true; }
+          else docRef.doc.addPage("a4", "p");
+          docRef.doc.addImage(jpegUrl, "JPEG", x, y, w, h);
+        } else if (item.kind === "text"){
+          if (!docRef.__started){ docRef.doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); docRef.__started = true; buildTextPages(docRef.doc, item.text, true); }
+          else buildTextPages(docRef.doc, item.text, false);
         } else {
-          if (!doc){ doc = new jsPDF({ orientation: "p", unit: "pt", format: "a4" }); firstPageUsed = true; buildTextPages(doc, item.text, true); }
-          else buildTextPages(doc, item.text, false);
+          statusCombine.textContent = `Converting ${item.name}…`;
+          let pages;
+          if (item.kind === "docx") pages = await convertDocxToPages(item.buffer);
+          else if (item.kind === "xlsx") pages = await convertXlsxToPages(item.buffer);
+          else if (item.kind === "pptx") pages = await convertPptxToPages(item.buffer);
+          addCanvasPagesToDoc(docRef, pages, 0.85);
         }
       }
 
-      if (!doc) throw new Error("no-files");
+      if (!docRef.doc) throw new Error("no-files");
+      const doc = docRef.doc;
 
       let outBytes = doc.output("arraybuffer");
       const shrinkOn = document.getElementById("combine-shrink-toggle").checked;
@@ -598,13 +784,14 @@
     } catch(err){
       statusCombine.className = "status err";
       statusCombine.textContent = "Couldn't build the PDF — check your files and try again.";
+      console.error(err);
     } finally {
       btnCombine.disabled = false;
     }
   });
 
-  document.getElementById("combine-save").addEventListener("click", (e) => {
-    if (combineOutputBytes) saveBytes(combineOutputBytes, "combined.pdf", e.target);
+  document.getElementById("combine-save").addEventListener("click", () => {
+    if (combineOutputBytes) saveBytes(combineOutputBytes, "combined.pdf");
   });
   document.getElementById("combine-send-shrink").addEventListener("click", () => {
     if (!combineOutputBytes) return;
@@ -708,15 +895,16 @@
     } catch(err){
       statusShrink.className = "status err";
       statusShrink.textContent = "Couldn't process that PDF — it may be encrypted or corrupted.";
+      console.error(err);
     } finally {
       btnShrink.disabled = false;
     }
   });
 
-  document.getElementById("shrink-save").addEventListener("click", (e) => {
+  document.getElementById("shrink-save").addEventListener("click", () => {
     if (shrinkOutputBytes){
       const base = shrinkInputName.replace(/\.pdf$/i, "");
-      saveBytes(shrinkOutputBytes, base + "-compressed.pdf", e.target);
+      saveBytes(shrinkOutputBytes, base + "-compressed.pdf");
     }
   });
 })();
